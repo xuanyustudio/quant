@@ -1,0 +1,15 @@
+# 代理服务器配置示例
+# 复制此文件为 .env
+
+# 监听端口
+PROXY_PORT=3000
+
+# 目标 API 地址
+TARGET_URL=https://api.binance.com
+
+# 日志级别 (debug, info, warn, error)
+LOG_LEVEL=info
+
+# 可选：认证 Token（增强安全性）
+# AUTH_TOKEN=your-secret-token-here
+

@@ -1,0 +1,51 @@
+{
+  "name": "crypto-arbitrage-bot",
+  "version": "1.0.0",
+  "description": "加密货币自动化套利系统",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "node --test",
+    "test:connection": "node src/scripts/test-connection.js",
+    "monitor": "node src/scripts/price-monitor.js",
+    "stat-arb": "node src/statistical-arbitrage/index.js",
+    "stat-arb:backtest": "node src/statistical-arbitrage/index.js --backtest",
+    "stat-arb:backtest-pair": "node src/statistical-arbitrage/backtest-single-pair.js",
+    "stat-arb:find-pairs": "node src/statistical-arbitrage/index.js --find-pairs",
+    "stat-arb:optimize": "node src/statistical-arbitrage/optimize-params.js",
+    "stat-arb:optimize-lookback": "node src/statistical-arbitrage/optimize-lookback.js",
+    "stat-arb:portfolio": "node src/statistical-arbitrage/portfolio-optimizer.js",
+    "stat-arb:check": "node src/statistical-arbitrage/newbie-checker.js",
+    "stat-arb:correlation": "node src/statistical-arbitrage/correlation-history.js",
+    "stat-arb:live": "node src/statistical-arbitrage/live-trading.js",
+    "diagnose": "node diagnose-live-trading.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop stat-arb",
+    "pm2:restart": "pm2 restart stat-arb",
+    "pm2:delete": "pm2 delete stat-arb",
+    "pm2:logs": "pm2 logs stat-arb",
+    "pm2:monit": "pm2 monit",
+    "pm2:list": "pm2 list"
+  },
+  "keywords": [
+    "crypto",
+    "arbitrage",
+    "trading",
+    "bot",
+    "cryptocurrency"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ccxt": "^4.1.0",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0",
+    "node-telegram-bot-api": "^0.64.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+
