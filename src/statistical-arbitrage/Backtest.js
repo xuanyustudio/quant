@@ -52,6 +52,10 @@ export class Backtest {
     const dataEndTime = new Date(timestamps[timestamps.length - 1]);
     const generateReport = options.generateReport !== false; // 默认生成报告
     
+    // ⭐ 获取当前币对的实际参数（优先使用币对专属，否则使用全局默认）
+    const pairKey = `${symbol1}_${symbol2}`;
+    const actualParams = this.strategy.getPairParams(pairKey);
+    
     // 获取初始价格（第一个数据点）
     const initialPrice1 = prices1[0];
     const initialPrice2 = prices2[0];
@@ -82,6 +86,20 @@ export class Backtest {
       logger.info(`📅 数据时间范围: ${dataStartTime.toLocaleString('zh-CN')} - ${dataEndTime.toLocaleString('zh-CN')}`);
       logger.info(`📊 数据点数量: ${prices1.length} 个`);
       logger.info(`📈 相关系数: ${correlation.toFixed(3)}`);
+      logger.info('');
+      
+      // ⭐ 显示币对参数
+      const hasPairSpecific = this.strategyConfig.pairSpecificParams && 
+                              this.strategyConfig.pairSpecificParams[pairKey];
+      if (hasPairSpecific) {
+        logger.info(`📋 币对参数: 使用 ${pairKey} 的专属参数 ✨`);
+      } else {
+        logger.info(`📋 币对参数: 使用全局默认参数`);
+      }
+      logger.info(`   回看周期: ${actualParams.lookbackPeriod}`);
+      logger.info(`   开仓阈值: ${actualParams.entryThreshold}`);
+      logger.info(`   平仓阈值: ${actualParams.exitThreshold}`);
+      logger.info(`   止损阈值: ${actualParams.stopLossThreshold}`);
       
       // 🔧 测试模式提示
       if (!this.strategyConfig.enforceCorrelation) {
@@ -107,7 +125,8 @@ export class Backtest {
     const drawdown = [0];
     let tradeCount = 0;
     
-    const lookback = this.strategy.lookbackPeriod;
+    // ⭐ 使用币对的实际lookbackPeriod参数
+    const lookback = actualParams.lookbackPeriod;
     
     // 计算预热期时长
     const warmupPeriodMinutes = lookback * this.getTimeframeMinutes(timestamps);
@@ -374,8 +393,8 @@ export class Backtest {
     const endTime = new Date();
     const duration = ((endTime - startTime) / 1000).toFixed(2);
     
-    // 生成报告
-    const report = this.generateReport();
+    // 生成报告（传入实际参数）
+    const report = this.generateReport(actualParams);
     
     logger.info('');
     logger.info('═'.repeat(60));
@@ -474,8 +493,9 @@ export class Backtest {
 
   /**
    * 生成回测报告
+   * @param {Object} actualParams - 实际使用的策略参数
    */
-  generateReport() {
+  generateReport(actualParams = {}) {
     const trades = this.results.trades;
     const equity = this.results.equity;
     const drawdown = this.results.drawdown;
@@ -550,14 +570,14 @@ export class Backtest {
       // 交易时长
       avgTradeDuration: this.calculateAvgTradeDuration(trades),
       
-      // 策略参数
+      // 策略参数（使用当前币对的实际参数）
       strategyParams: {
-        entryThreshold: this.strategyConfig.entryThreshold,
-        exitThreshold: this.strategyConfig.exitThreshold,
-        stopLossThreshold: this.strategyConfig.stopLossThreshold,
+        entryThreshold: actualParams.entryThreshold,
+        exitThreshold: actualParams.exitThreshold,
+        stopLossThreshold: actualParams.stopLossThreshold,
+        lookbackPeriod: actualParams.lookbackPeriod,
         positionSize: this.positionSize,
         initialCapital: this.initialCapital,
-        lookbackPeriod: this.strategyConfig.lookbackPeriod || 100,
         minCorrelation: this.strategyConfig.minCorrelation || 0.75
       }
     };

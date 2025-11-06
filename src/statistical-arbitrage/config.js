@@ -186,15 +186,14 @@ export default {
     ],
 
     // ========== 相关性分析 ==========
-    minCorrelation: 0.75,        // 最小相关系数（0.75 = 强相关）
+    minCorrelation: 0.6,         // 最小相关系数（0.6 = 中等偏强相关，适合回测）
     maxStability: 0.05,          // 最大标准差（σ < 0.05 = 非常稳定，优质配对）
     maxPairs: 300,               // 回测300个相关配对，然后选收益最好的前3个
-    enforceCorrelation: true,   // ⚠️ 测试模式：设为false则忽略相关性检查，只基于Z-Score交易
+    enforceCorrelation: true,    // ✅ 已启用相关性检查（更安全）
 
     // ========== 时间参数 ==========
     timeframe: '1h',             // 相关性分析K线周期：'1m', '5m', '15m', '1h', '4h', '1d'
     backtestTimeframe: '15m',    // 回测K线周期（更细粒度，捕捉更多交易机会）
-    lookbackPeriod: 100,         // 回看周期（K线数量）
     correlationPeriod: 720,      // 相关性分析周期（小时）：720h = 30天（已弃用，改用多月分析）
     correlationAnalysisMonths: 6, // 相关性分析月份数：默认3个月，计算平均相关性以提高可靠性
     
@@ -203,12 +202,46 @@ export default {
     backtestStartDate: '2025-08-01',  // 回测开始日期
     backtestEndDate: '2025-08-30',    // 回测结束日期
     
-    // ========== 交易信号 ==========
+    // ========== 交易信号（全局默认参数）==========
     // ✨ 策略已启用价格归一化，解决初始价差大导致Z-Score失效的问题
     // 两个价格序列都会归一化到起始值为1，然后计算相对价差
-    entryThreshold: 3.1,         // 开仓Z-score阈值（标准差倍数）- 精细化优化后
-    exitThreshold: 0.6,          // 平仓Z-score阈值 - 精细化优化后
-    stopLossThreshold: 4.75,     // 止损Z-score阈值 - 精细化优化后
+    // 
+    // 这些是全局默认参数，如果某个币对没有单独配置，则使用这些值
+    lookbackPeriod: 120,         // 回看周期（K线数量）- 默认值
+    entryThreshold: 2.5,         // 开仓Z-score阈值（标准差倍数）- 精细化优化后
+    exitThreshold: 0.5,          // 平仓Z-score阈值 - 精细化优化后
+    stopLossThreshold: 5,     // 止损Z-score阈值 - 精细化优化后
+    
+    // ========== 币对级别参数（覆盖全局默认值）==========
+    // 格式：'SYMBOL1/SYMBOL2': { lookbackPeriod, entryThreshold, exitThreshold, stopLossThreshold }
+    // 例如：经过 optimize-params.js 优化后，为每个币对设置最优参数
+    pairSpecificParams: {
+      // 示例：
+      // 'HOOK/USDT_MINA/USDT': {
+      //   lookbackPeriod: 120,
+      //   entryThreshold: 3.5,
+      //   exitThreshold: 0.8,
+      //   stopLossThreshold: 5.0
+      // },
+      // 'POLYX/USDT_ID/USDT': {
+      //   lookbackPeriod: 80,
+      //   entryThreshold: 2.8,
+      //   exitThreshold: 0.5,
+      //   stopLossThreshold: 4.5
+      // }
+      'ID/USDT_HOOK/USDT': {
+        lookbackPeriod: 120,
+        entryThreshold: 2.5,
+        exitThreshold: 0.5,
+        stopLossThreshold: 5
+      },
+      'MINA/USDT_POLYX/USDT': {
+        lookbackPeriod: 140,
+        entryThreshold: 3.5,
+        exitThreshold: 0.5,
+        stopLossThreshold: 5
+      }
+    },
     
     // ========== 资金管理（新手测试模式）==========
     initialCapital: 1000,        // 初始资金（USDT）- 测试资金

@@ -11,25 +11,51 @@ export class PairsStrategy {
     this.config = config;
     this.analyzer = new StatisticalAnalyzer(config);
     
-    // 策略参数
-    this.entryThreshold = config.entryThreshold || 2.0;    // 开仓Z-score阈值
-    this.exitThreshold = config.exitThreshold || 0.5;      // 平仓Z-score阈值
-    this.stopLossThreshold = config.stopLossThreshold || 3.5; // 止损Z-score阈值
-    this.lookbackPeriod = config.lookbackPeriod || 100;    // 回看周期
+    // 全局默认策略参数
+    this.defaultLookbackPeriod = config.lookbackPeriod || 100;    // 回看周期
+    this.defaultEntryThreshold = config.entryThreshold || 2.0;    // 开仓Z-score阈值
+    this.defaultExitThreshold = config.exitThreshold || 0.5;      // 平仓Z-score阈值
+    this.defaultStopLossThreshold = config.stopLossThreshold || 3.5; // 止损Z-score阈值
+    
+    // ⚠️ 为了向后兼容，保留 lookbackPeriod 属性（Backtest.js 会用到）
+    this.lookbackPeriod = this.defaultLookbackPeriod;
+    
+    // 其他参数
     this.minCorrelation = config.minCorrelation || 0.7;    // 最小相关系数
     this.enforceCorrelation = config.enforceCorrelation !== undefined ? config.enforceCorrelation : true; // 是否强制检查相关性
+    
+    // 币对级别参数（优先级高于全局默认）
+    this.pairSpecificParams = config.pairSpecificParams || {};
     
     // 持仓记录
     this.positions = new Map();
     this.trades = [];
   }
+  
+  /**
+   * 获取币对的参数（优先使用币对级别，否则使用全局默认）
+   */
+  getPairParams(pairKey) {
+    const pairParams = this.pairSpecificParams[pairKey] || {};
+    
+    return {
+      lookbackPeriod: pairParams.lookbackPeriod || this.defaultLookbackPeriod,
+      entryThreshold: pairParams.entryThreshold || this.defaultEntryThreshold,
+      exitThreshold: pairParams.exitThreshold || this.defaultExitThreshold,
+      stopLossThreshold: pairParams.stopLossThreshold || this.defaultStopLossThreshold
+    };
+  }
 
   /**
    * 分析配对
-   * @param {string} pairKey - 配对键（用于查询当前持仓）
+   * @param {string} pairKey - 配对键（用于查询当前持仓和参数）
    */
   analyzePair(symbol1, symbol2, prices1, prices2, pairKey = null) {
     try {
+      // 0. 获取币对参数（优先使用币对级别，否则使用全局默认）
+      const params = this.getPairParams(pairKey || `${symbol1}_${symbol2}`);
+      const { lookbackPeriod, entryThreshold, exitThreshold, stopLossThreshold } = params;
+      
       // 1. 计算相关性
       const correlation = this.analyzer.calculateCorrelation(prices1, prices2);
       
@@ -47,8 +73,8 @@ export class PairsStrategy {
       // 3. 计算价差（使用归一化方法，解决初始价差大的问题）
       const spread = this.analyzer.calculateSpread(prices1, prices2, 'normalized_ratio');
       
-      // 4. 计算Z-Score
-      const zScores = this.analyzer.calculateZScore(spread, this.lookbackPeriod);
+      // 4. 计算Z-Score（使用币对的 lookbackPeriod）
+      const zScores = this.analyzer.calculateZScore(spread, lookbackPeriod);
       const currentZScore = zScores[zScores.length - 1];
       
       // 5. 计算半衰期
@@ -79,7 +105,8 @@ export class PairsStrategy {
           series: zScores
         },
         halfLife,
-        signal: this.generateSignal(currentZScore, positionType),
+        signal: this.generateSignal(currentZScore, positionType, params),
+        params, // 返回使用的参数
         timestamp: Date.now()
       };
 
@@ -96,8 +123,14 @@ export class PairsStrategy {
    * 生成交易信号
    * @param {number} zScore - 当前Z-Score
    * @param {string|null} positionType - 当前持仓类型 ('OPEN_LONG', 'OPEN_SHORT', null)
+   * @param {object} params - 参数对象（可选，包含 entryThreshold, exitThreshold, stopLossThreshold）
    */
-  generateSignal(zScore, positionType = null) {
+  generateSignal(zScore, positionType = null, params = null) {
+    // 使用传入的参数或默认参数
+    const entryThreshold = params?.entryThreshold || this.defaultEntryThreshold;
+    const exitThreshold = params?.exitThreshold || this.defaultExitThreshold;
+    const stopLossThreshold = params?.stopLossThreshold || this.defaultStopLossThreshold;
+    
     const absZScore = Math.abs(zScore);
     
     // 止损信号 - 需要根据持仓方向判断
@@ -105,7 +138,7 @@ export class PairsStrategy {
       // 有持仓时，根据方向判断止损
       if (positionType === 'OPEN_LONG') {
         // 做多价差：如果Z继续下降（更负），超过止损阈值则止损
-        if (zScore < -this.stopLossThreshold) {
+        if (zScore < -stopLossThreshold) {
           return {
             action: 'STOP_LOSS',
             zScore,
@@ -114,7 +147,7 @@ export class PairsStrategy {
         }
       } else if (positionType === 'OPEN_SHORT') {
         // 做空价差：如果Z继续上升（更正），超过止损阈值则止损
-        if (zScore > this.stopLossThreshold) {
+        if (zScore > stopLossThreshold) {
           return {
             action: 'STOP_LOSS',
             zScore,
@@ -126,23 +159,23 @@ export class PairsStrategy {
     
     // 开仓信号（无持仓时）
     if (!positionType) {
-      if (zScore > this.entryThreshold) {
+      if (zScore > entryThreshold) {
         return {
           action: 'OPEN_SHORT',
           zScore,
           reason: `价差偏高，做空价差: Z=${zScore.toFixed(2)}`
         };
-      } else if (zScore < -this.entryThreshold) {
+      } else if (zScore < -entryThreshold) {
         return {
           action: 'OPEN_LONG',
           zScore,
           reason: `价差偏低，做多价差: Z=${zScore.toFixed(2)}`
-        };
+          };
       }
     }
     
     // 平仓信号（有持仓时）
-    if (positionType && absZScore < this.exitThreshold) {
+    if (positionType && absZScore < exitThreshold) {
       return {
         action: 'CLOSE',
         zScore,
@@ -349,8 +382,12 @@ export class PairsStrategy {
     if (!position) return null;
     
     const pnl = this.calculatePnL(position, price1, price2);
-    // ⚠️ 修复：传入当前持仓类型，以便正确判断平仓和止损条件
-    const signal = this.generateSignal(zScore, position.type);
+    
+    // 获取币对参数
+    const params = this.getPairParams(pairKey);
+    
+    // ⚠️ 修复：传入当前持仓类型和参数，以便正确判断平仓和止损条件
+    const signal = this.generateSignal(zScore, position.type, params);
     
     // 检查是否需要止损或平仓
     if (signal.action === 'STOP_LOSS' || signal.action === 'CLOSE') {

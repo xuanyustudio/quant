@@ -729,6 +729,13 @@ class StatisticalArbitrageEngine {
     logger.info('═'.repeat(60));
     logger.info('🔴 启动实盘交易...');
     logger.info('═'.repeat(60));
+    logger.info('');
+    
+    // 显示初始账户余额
+    logger.info('📊 初始账户状态:');
+    await this.displayAccountBalance();
+    logger.info('');
+    logger.info('═'.repeat(60));
     
     this.isRunning = true;
     let checkCount = 0;
@@ -925,9 +932,12 @@ class StatisticalArbitrageEngine {
           }
         }
         
+        // 显示账户余额
+        logger.info('═'.repeat(60));
+        await this.displayAccountBalance();
+        
         // 显示统计信息
         const stats = this.strategy.getStatistics();
-        logger.info('═'.repeat(60));
         if (stats.totalTrades > 0) {
           logger.info('📊 累计统计:');
           logger.info(`   总交易次数: ${stats.totalTrades}`);
@@ -963,6 +973,112 @@ class StatisticalArbitrageEngine {
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 查询账户余额（现货和合约）
+   */
+  async fetchAccountBalance() {
+    try {
+      const balances = {
+        spot: { total: 0, free: 0, used: 0, usdt: 0 },
+        futures: { total: 0, free: 0, used: 0, usdt: 0 }
+      };
+
+      // 1. 查询现货账户余额
+      try {
+        const spotBalance = await this.exchange.fetchBalance({ type: 'spot' });
+        
+        if (spotBalance && spotBalance.total) {
+          // 统计 USDT 余额
+          if (spotBalance.total['USDT']) {
+            balances.spot.usdt = spotBalance.total['USDT'] || 0;
+            balances.spot.free = spotBalance.free['USDT'] || 0;
+            balances.spot.used = spotBalance.used['USDT'] || 0;
+          }
+          
+          // 统计总资产价值（所有币种）
+          balances.spot.total = Object.keys(spotBalance.total).reduce((sum, currency) => {
+            const amount = spotBalance.total[currency] || 0;
+            if (amount > 0 && currency !== 'USDT') {
+              // 这里简化处理，实际应该乘以价格
+              // 对于 USDT 已经统计了
+            }
+            return sum;
+          }, balances.spot.usdt);
+        }
+      } catch (spotError) {
+        logger.warn(`   ⚠️  查询现货余额失败: ${spotError.message}`);
+      }
+
+      // 2. 查询合约账户余额
+      try {
+        const futuresBalance = await this.exchange.fetchBalance({ type: 'future' });
+        
+        if (futuresBalance && futuresBalance.total) {
+          // 统计 USDT 余额
+          if (futuresBalance.total['USDT']) {
+            balances.futures.usdt = futuresBalance.total['USDT'] || 0;
+            balances.futures.free = futuresBalance.free['USDT'] || 0;
+            balances.futures.used = futuresBalance.used['USDT'] || 0;
+          }
+          
+          balances.futures.total = balances.futures.usdt;
+        }
+      } catch (futuresError) {
+        logger.warn(`   ⚠️  查询合约余额失败: ${futuresError.message}`);
+      }
+
+      return balances;
+    } catch (error) {
+      logger.error(`查询账户余额失败: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * 显示账户余额信息
+   */
+  async displayAccountBalance() {
+    try {
+      const balances = await this.fetchAccountBalance();
+      
+      if (!balances) {
+        logger.warn('   ⚠️  无法获取账户余额');
+        return;
+      }
+
+      logger.info('💰 账户余额:');
+      
+      // 现货账户
+      if (balances.spot.usdt > 0 || balances.spot.total > 0) {
+        logger.info(`   📍 现货账户:`);
+        logger.info(`      • USDT 总额: $${balances.spot.usdt.toFixed(2)}`);
+        logger.info(`      • 可用: $${balances.spot.free.toFixed(2)}`);
+        logger.info(`      • 占用: $${balances.spot.used.toFixed(2)}`);
+      } else {
+        logger.info(`   📍 现货账户: 未查询到余额`);
+      }
+      
+      // 合约账户
+      if (balances.futures.usdt > 0 || balances.futures.total > 0) {
+        logger.info(`   📍 合约账户:`);
+        logger.info(`      • USDT 总额: $${balances.futures.usdt.toFixed(2)}`);
+        logger.info(`      • 可用: $${balances.futures.free.toFixed(2)}`);
+        logger.info(`      • 占用: $${balances.futures.used.toFixed(2)}`);
+      } else {
+        logger.info(`   📍 合约账户: 未查询到余额`);
+      }
+      
+      // 总计
+      const totalBalance = balances.spot.usdt + balances.futures.usdt;
+      if (totalBalance > 0) {
+        logger.info(`   💎 总资产: $${totalBalance.toFixed(2)}`);
+      }
+      
+    } catch (error) {
+      logger.error(`显示账户余额失败: ${error.message}`);
+    }
   }
 
   /**
